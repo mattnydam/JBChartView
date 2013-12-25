@@ -205,7 +205,7 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
             
             if ([self.dataSource respondsToSelector:@selector(barChartView:barViewForIndex:)]) {
                 
-                barView = [self.delegate barChartView:self barViewForIndex:index];
+                barView = [self.dataSource barChartView:self barViewForIndex:index];
                 
             } else {
                 // -- Just in case the delgate hasn't implemented the required functions
