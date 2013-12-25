@@ -52,6 +52,15 @@
  */
 - (NSInteger)barChartView:(JBBarChartView *)barChartView heightForBarViewAtAtIndex:(NSInteger)index;
 
+/**
+ *  JBBarView for the index. Customise the view at will (shadows, border etc).;
+ *  The chart will resize the JBBarView as necessary.
+ *
+ *  @param barChartView The origin chart
+ *  @param index        The 0-based index of a given bar (left to right, x-axis)
+ *
+ *  @return A new JBBarView for the supplied index.
+ */
 - (JBBarView *)barChartView:(JBBarChartView *)barChartView barViewForIndex:(NSInteger)index;
 
 @optional
