@@ -14,15 +14,22 @@ CGFloat const kJBBarChartViewUndefinedMaxHeight = -1.0f;
 CGFloat const kJBBarChartViewStateAnimationDuration = 0.05f;
 CGFloat const kJBBarChartViewPopOffset = 10.0f; // used to offset bars for 'pop' animations
 NSInteger const kJBBarChartViewUndefinedBarIndex = -1;
-
+NSInteger const kJBBarChartViewNumberOfYLabels = 8;
 // Colors (JBChartView)
 static UIColor *kJBBarChartViewDefaultBarColor = nil;
+
+@implementation JBBarView
+
+@end
 
 @interface JBBarChartView ()
 
 @property (nonatomic, strong) NSDictionary *chartDataDictionary; // key = column, value = height
 @property (nonatomic, strong) NSArray *barViews;
 @property (nonatomic, assign) CGFloat barPadding;
+@property (nonatomic, strong) NSArray *yLabels;
+@property (nonatomic, strong) NSArray *yLines;
+@property (nonatomic, assign) CGFloat yAxisWidth;
 @property (nonatomic, assign) CGFloat cachedMaxHeight;
 @property (nonatomic, strong) JBChartSelectionView *selectionView;
 @property (nonatomic, assign) BOOL selectionViewVisible;
@@ -61,9 +68,10 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
     if (self)
     {
         self.clipsToBounds = YES;
-        _barShadowEnabled = YES;
         _showsSelection = YES;
         _cachedMaxHeight = kJBBarChartViewUndefinedMaxHeight;
+        _yAxisLabelsEnabled = YES;
+        _yAxisWidth = 30.0f;
     }
     return self;
 }
@@ -97,6 +105,9 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
             [dataDictionary setObject:[NSNumber numberWithInt:(int)[self.delegate barChartView:self heightForBarViewAtAtIndex:index]] forKey:[NSNumber numberWithInt:(int)index]];
         }
         self.chartDataDictionary = [NSDictionary dictionaryWithDictionary:dataDictionary];
+        
+        // -- Data changed and maxHeight may have changed so recalculate it
+        [self recalculateMaxHeight];
 	};
     
     /*
@@ -115,6 +126,63 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
     };
 
     /*
+     * Creates the yLabels and Lines
+     */
+    dispatch_block_t createYLabelsAndLines = ^{
+        
+        // Remove old labels
+        for (UILabel *label in self.yLabels)
+        {
+            [label removeFromSuperview];
+        }
+        
+        // Remove old lines
+        for (CALayer *layer in self.yLines) {
+            [layer removeFromSuperlayer];
+        }
+        
+        NSMutableArray *labels = [NSMutableArray array];
+        NSMutableArray *lines = [NSMutableArray array];
+        
+        if (self.yAxisLabelsEnabled) {
+            
+            // -- Calculate Every X
+            NSInteger max = [self maxHeight];
+            CGFloat step = max / kJBBarChartViewNumberOfYLabels;
+            
+            // -- Create Labels
+            for (NSInteger i = step; i < [self maxHeight]; i += step) {
+                
+                CGFloat height = [self normalizedHeightForRawHeight:@(i)];
+                UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0.0, self.bounds.size.height - height - self.footerView.frame.size.height + self.headerPadding - 5, 20.0, 11)];
+                label.font = [UIFont systemFontOfSize:11.0f];
+                
+                [label setTextAlignment:NSTextAlignmentRight];
+                label.text = [NSString stringWithFormat:@"%ld", (long)i];
+                [self addSubview:label];
+                [labels addObject:label];
+                
+            }
+            
+            // -- Create lines
+            for (NSInteger i = step; i < [self maxHeight]; i += step) {
+                
+                CALayer *line = [CALayer layer];
+                line.backgroundColor = [UIColor colorWithWhite:0.9f alpha:1.0f].CGColor;
+                CGFloat height = [self normalizedHeightForRawHeight:@(i)];
+                line.frame = CGRectMake(25.0f, self.bounds.size.height - height - self.footerView.frame.size.height + self.headerPadding, self.bounds.size.width, 1);
+                [self.layer addSublayer:line];
+                [lines addObject:line];
+                
+            }
+        }
+        
+        self.yLabels = [NSArray arrayWithArray:labels];
+        self.yLines = [NSArray arrayWithArray:lines];
+        
+    };
+    
+    /*
      * Creates a new bar graph view using the previously calculated data model
      */
     dispatch_block_t createBars = ^{
@@ -125,30 +193,34 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
             [barView removeFromSuperview];
         }
         
-        CGFloat xOffset = 0;
+        // -- Set to the yLabelWidth to offset
+        CGFloat xOffset = self.yAxisWidth;
+        
         NSInteger index = 0;
         NSMutableArray *mutableBarViews = [NSMutableArray array];
         for (NSNumber *key in [[self.chartDataDictionary allKeys] sortedArrayUsingSelector:@selector(compare:)])
         {
-            UIView *barView = [[UIView alloc] init];
+            
+            JBBarView *barView;
+            
+            if ([self.dataSource respondsToSelector:@selector(barChartView:barViewForIndex:)]) {
+                
+                barView = [self.delegate barChartView:self barViewForIndex:index];
+                
+            } else {
+                // -- Just in case the delgate hasn't implemented the required functions
+                barView = [[JBBarView alloc] init];
+                barView.backgroundColor = kJBBarChartViewDefaultBarColor;
+            }
+            
+            // -- Probably can remove the barColorForBarChartView:atIndex as the delegate can set it when it passes the JBBarView in..
             if ([self.dataSource respondsToSelector:@selector(barColorForBarChartView:atIndex:)])
             {
                 barView.backgroundColor = [self.dataSource barColorForBarChartView:self atIndex:index];
             }
-            else
-            {
-                barView.backgroundColor = kJBBarChartViewDefaultBarColor;
-            }
+            
             CGFloat height = [self normalizedHeightForRawHeight:[self.chartDataDictionary objectForKey:key]];
             barView.frame = CGRectMake(xOffset, self.bounds.size.height - height - self.footerView.frame.size.height + self.headerPadding, [self barWidth], height + kJBBarChartViewPopOffset - self.headerPadding);
-            
-            if (self.barShadowEnabled) {
-                barView.layer.shadowColor = [UIColor blackColor].CGColor;
-                barView.layer.shadowOffset = CGSizeMake(0, 0);
-                barView.layer.shadowOpacity = 0.4;
-                barView.layer.shadowRadius = 1.0;
-                barView.layer.shadowPath = [UIBezierPath bezierPathWithRect:barView.bounds].CGPath;
-            }
             
             [mutableBarViews addObject:barView];
 			
@@ -200,6 +272,7 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
     
     createDataDictionaries();
     createBarPadding();
+    createYLabelsAndLines();
     createBars();
     createSelectionView();
     
@@ -229,6 +302,12 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
     return ceil(((value - minHeight) / (maxHeight - minHeight)) * [self availableHeight]);
 }
 
+- (CGFloat)recalculateMaxHeight
+{
+    self.cachedMaxHeight = kJBBarChartViewUndefinedMaxHeight;
+    return [self maxHeight];
+}
+
 - (CGFloat)maxHeight
 {
     if (self.cachedMaxHeight == kJBBarChartViewUndefinedMaxHeight)
@@ -251,7 +330,7 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
     if (barCount > 0)
     {
         CGFloat totalPadding = (barCount - 1) * self.barPadding;
-        CGFloat availableWidth = self.bounds.size.width - totalPadding;
+        CGFloat availableWidth = self.bounds.size.width - totalPadding - self.yAxisWidth;
         return availableWidth / barCount;
     }
     return 0;
@@ -272,7 +351,7 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
         NSInteger index = 0;
         for (UIView *barView in self.barViews)
         {
-            [UIView animateWithDuration:kJBBarChartViewStateAnimationDuration delay:(kJBBarChartViewStateAnimationDuration * 0.5) * index options:UIViewAnimationOptionBeginFromCurrentState animations:^{
+            [UIView animateWithDuration:kJBBarChartViewStateAnimationDuration delay:(kJBBarChartViewStateAnimationDuration * 0.2) * index options:UIViewAnimationOptionBeginFromCurrentState animations:^{
                 barView.frame = CGRectMake(barView.frame.origin.x, popOffset - barView.frame.size.height, barView.frame.size.width, barView.frame.size.height);
             } completion:^(BOOL finished) {
                 [UIView animateWithDuration:kJBBarChartViewStateAnimationDuration delay:0.0 options:UIViewAnimationOptionBeginFromCurrentState animations:^{
@@ -378,6 +457,12 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
     [self setSelectionViewVisible:selectionViewVisible animated:NO];
 }
 
+- (void)setYAxisLabelsEnabled:(BOOL)yAxisLabelsEnabled
+{
+    _yAxisLabelsEnabled = yAxisLabelsEnabled;
+    self.yAxisWidth = _yAxisLabelsEnabled ? 30.0 : 0.0;
+}
+
 #pragma mark - Touches
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
@@ -450,3 +535,4 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
 }
 
 @end
+

@@ -12,6 +12,10 @@
 @protocol JBBarChartViewDelegate;
 @protocol JBBarChartViewDataSource;
 
+@interface JBBarView : UIView
+
+@end
+
 @interface JBBarChartView : JBChartView
 
 @property (nonatomic, weak) id<JBBarChartViewDelegate> delegate;
@@ -25,11 +29,11 @@
 @property (nonatomic, assign) BOOL showsSelection;
 
 /**
- *  If barShadowEnabled is YES, a shadow will be drawn behind each Bar
+ *  If yAxisLabelsEnabled is YES, the Y Axis labels and lines will be drawn
  *
  *  Default: YES
  */
-@property (nonatomic, assign) BOOL barShadowEnabled;
+@property (nonatomic, assign) BOOL yAxisLabelsEnabled;
 
 @end
 
@@ -47,6 +51,8 @@
  *  @return The y-axis height of the supplied bar index (x-axis)
  */
 - (NSInteger)barChartView:(JBBarChartView *)barChartView heightForBarViewAtAtIndex:(NSInteger)index;
+
+- (JBBarView *)barChartView:(JBBarChartView *)barChartView barViewForIndex:(NSInteger)index;
 
 @optional
 
