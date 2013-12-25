@@ -70,8 +70,8 @@ static UIColor *kJBBarChartViewDefaultBarColor = nil;
         self.clipsToBounds = YES;
         _showsSelection = YES;
         _cachedMaxHeight = kJBBarChartViewUndefinedMaxHeight;
-        _yAxisLabelsEnabled = YES;
-        _yAxisWidth = 30.0f;
+        _yAxisLabelsEnabled = NO;
+        _yAxisWidth = 0.0f;
     }
     return self;
 }
